@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
   StyleSheet,
   Text,
   View,
   type LayoutChangeEvent,
 } from 'react-native';
+import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CapturedTray } from '@/components/captured-tray';
@@ -20,6 +22,8 @@ import { colors, radius, spacing } from '@/theme/colors';
 const SCREEN_PADDING = spacing.lg;
 const VERTICAL_CHROME = 340;
 const FALLBACK_BOARD_SIZE = 300;
+/** Wait for the board's slide animation before the computer searches. */
+const COMPUTER_MOVE_DELAY = 260;
 
 export function GameScreen() {
   const [boardSize, setBoardSize] = useState(FALLBACK_BOARD_SIZE);
@@ -37,6 +41,9 @@ export function GameScreen() {
   const status = useGameStore((state) => state.status);
   const fen = useGameStore((state) => state.fen);
   const pendingPromotion = useGameStore((state) => state.pendingPromotion);
+  const mode = useGameStore((state) => state.mode);
+  const humanColor = useGameStore((state) => state.humanColor);
+  const isComputerThinking = useGameStore((state) => state.isComputerThinking);
 
   const tapSquare = useGameStore((state) => state.tapSquare);
   const selectSquare = useGameStore((state) => state.selectSquare);
@@ -46,6 +53,7 @@ export function GameScreen() {
   const newGame = useGameStore((state) => state.newGame);
   const promote = useGameStore((state) => state.promote);
   const cancelPromotion = useGameStore((state) => state.cancelPromotion);
+  const playComputerMove = useGameStore((state) => state.playComputerMove);
 
   const handleContentLayout = (event: LayoutChangeEvent) => {
     const { width: contentWidth, height: contentHeight } = event.nativeEvent.layout;
@@ -63,9 +71,24 @@ export function GameScreen() {
   };
 
   const turnLabel = turn === 'w' ? 'White' : 'Black';
-  const disabled = status.isOver || pendingPromotion !== null;
-  const canUndo = history.length > 0;
+  const isComputerTurn = mode === 'computer' && turn !== humanColor;
+  const disabled = status.isOver || pendingPromotion !== null || isComputerTurn;
+  const canUndo =
+    history.length > 0 && !isComputerThinking && (!isComputerTurn || status.isOver);
   const showGameOver = status.isOver && dismissedFen !== fen;
+
+  // Let the move animation finish before the engine starts searching.
+  useEffect(() => {
+    if (!isComputerTurn || status.isOver) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      void playComputerMove();
+    }, COMPUTER_MOVE_DELAY);
+
+    return () => clearTimeout(timer);
+  }, [isComputerTurn, playComputerMove, status.isOver]);
 
   const startNewGame = () => {
     setDismissedFen(null);
@@ -89,20 +112,42 @@ export function GameScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         <View style={styles.content} onLayout={handleContentLayout}>
           <View style={[styles.header, { width: boardSize }]}>
-            <Text style={styles.title}>Chess</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Back to start screen"
+              hitSlop={8}
+              onPress={() => router.back()}
+              style={({ pressed }) => [
+                styles.menuButton,
+                pressed && styles.menuButtonPressed,
+              ]}>
+              <Text style={styles.menuText}>‹ Menu</Text>
+            </Pressable>
 
             <View style={styles.turnBadge}>
-              <View
-                style={[
-                  styles.turnDot,
-                  {
-                    backgroundColor: turn === 'w' ? colors.whitePiece : colors.blackPiece,
-                    borderColor:
-                      turn === 'w' ? colors.whitePieceStroke : colors.blackPieceStroke,
-                  },
-                ]}
-              />
-              <Text style={styles.turnText}>{turnLabel}</Text>
+              {isComputerThinking ? (
+                <>
+                  <ActivityIndicator size="small" color={colors.textMuted} />
+                  <Text style={styles.turnText}>Thinking…</Text>
+                </>
+              ) : (
+                <>
+                  <View
+                    style={[
+                      styles.turnDot,
+                      {
+                        backgroundColor:
+                          turn === 'w' ? colors.whitePiece : colors.blackPiece,
+                        borderColor:
+                          turn === 'w'
+                            ? colors.whitePieceStroke
+                            : colors.blackPieceStroke,
+                      },
+                    ]}
+                  />
+                  <Text style={styles.turnText}>{turnLabel}</Text>
+                </>
+              )}
             </View>
           </View>
 
@@ -215,11 +260,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  title: {
-    fontSize: 26,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-    color: colors.text,
+  menuButton: {
+    paddingVertical: spacing.xs,
+    paddingRight: spacing.sm,
+  },
+  menuButtonPressed: {
+    opacity: 0.6,
+  },
+  menuText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.textMuted,
   },
   turnBadge: {
     flexDirection: 'row',

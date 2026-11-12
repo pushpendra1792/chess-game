@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 
+import { findBestMove, type Difficulty } from '@/engine/ai';
 import {
   createGame,
   getLegalTargets,
@@ -14,11 +15,20 @@ import {
   type Square,
 } from '@/engine/chess';
 
+export type { Difficulty } from '@/engine/ai';
 export type { PromotionPiece } from '@/engine/chess';
+
+export type GameMode = 'two-player' | 'computer';
 
 export type PendingPromotion = {
   from: Square;
   to: Square;
+};
+
+export type StartGameOptions = {
+  mode: GameMode;
+  difficulty?: Difficulty;
+  humanColor?: Color;
 };
 
 type GameSnapshot = {
@@ -36,7 +46,15 @@ type GameSnapshot = {
   pendingPromotion: PendingPromotion | null;
 };
 
+type GameSettings = {
+  mode: GameMode;
+  difficulty: Difficulty;
+  humanColor: Color;
+  isComputerThinking: boolean;
+};
+
 type GameActions = {
+  startGame: (options: StartGameOptions) => void;
   tapSquare: (square: Square) => void;
   selectSquare: (square: Square) => void;
   dropSquare: (square: Square) => void;
@@ -45,15 +63,19 @@ type GameActions = {
   newGame: () => void;
   promote: (piece: PromotionPiece) => void;
   cancelPromotion: () => void;
+  playComputerMove: () => Promise<void>;
 };
 
-export type GameStore = GameSnapshot & GameActions;
+export type GameStore = GameSnapshot & GameSettings & GameActions;
 
 /**
  * The Chess instance lives outside of React state and is the single source of
  * truth for the rules. The store only publishes a snapshot for rendering.
  */
 let game = createGame();
+
+/** Incremented whenever a new position is started, to discard stale AI results. */
+let gameId = 0;
 
 function createSnapshot(): GameSnapshot {
   return {
@@ -81,6 +103,11 @@ export const useGameStore = create<GameStore>((set, get) => {
     set(createSnapshot());
   };
 
+  const isHumanTurn = () => {
+    const { mode, humanColor } = get();
+    return mode !== 'computer' || game.turn() === humanColor;
+  };
+
   const attemptMove = (from: Square, to: Square) => {
     const target = getMoveTo(game, from, to);
 
@@ -103,16 +130,33 @@ export const useGameStore = create<GameStore>((set, get) => {
 
   return {
     ...createSnapshot(),
+    mode: 'two-player',
+    difficulty: 'medium',
+    humanColor: 'w',
+    isComputerThinking: false,
+
+    startGame: (options) => {
+      gameId += 1;
+      game = createGame();
+      set({
+        ...createSnapshot(),
+        mode: options.mode,
+        difficulty: options.difficulty ?? 'medium',
+        humanColor: options.humanColor ?? 'w',
+        isComputerThinking: false,
+      });
+    },
 
     newGame: () => {
+      gameId += 1;
       game = createGame();
-      set(createSnapshot());
+      set({ ...createSnapshot(), isComputerThinking: false });
     },
 
     tapSquare: (square) => {
       const { selectedSquare, legalMoves, status, pendingPromotion } = get();
 
-      if (pendingPromotion || status.isOver) {
+      if (!isHumanTurn() || pendingPromotion || status.isOver) {
         return;
       }
 
@@ -144,7 +188,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     selectSquare: (square) => {
       const { status, pendingPromotion } = get();
 
-      if (pendingPromotion || status.isOver) {
+      if (!isHumanTurn() || pendingPromotion || status.isOver) {
         return;
       }
 
@@ -164,7 +208,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     dropSquare: (square) => {
       const { selectedSquare, legalMoves, status, pendingPromotion } = get();
 
-      if (pendingPromotion || status.isOver || !selectedSquare) {
+      if (!isHumanTurn() || pendingPromotion || status.isOver || !selectedSquare) {
         set({ selectedSquare: null, legalMoves: [] });
         return;
       }
@@ -182,18 +226,24 @@ export const useGameStore = create<GameStore>((set, get) => {
     },
 
     undo: () => {
-      const { history, pendingPromotion } = get();
+      const { history, pendingPromotion, mode, isComputerThinking } = get();
 
       if (pendingPromotion) {
         set({ pendingPromotion: null, selectedSquare: null, legalMoves: [] });
         return;
       }
 
-      if (history.length === 0) {
+      if (isComputerThinking || history.length === 0) {
         return;
       }
 
-      game.undo();
+      // In computer mode take back both the computer's reply and the human move.
+      const plies = mode === 'computer' ? 2 : 1;
+
+      for (let index = 0; index < plies && game.history().length > 0; index += 1) {
+        game.undo();
+      }
+
       set(createSnapshot());
     },
 
@@ -209,6 +259,43 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     cancelPromotion: () => {
       set({ pendingPromotion: null, selectedSquare: null, legalMoves: [] });
+    },
+
+    playComputerMove: async () => {
+      const state = get();
+
+      if (state.mode !== 'computer' || state.isComputerThinking || state.status.isOver) {
+        return;
+      }
+
+      if (game.turn() === state.humanColor) {
+        return;
+      }
+
+      const activeGameId = gameId;
+      set({ isComputerThinking: true, selectedSquare: null, legalMoves: [] });
+
+      const move = await findBestMove(game.fen(), state.difficulty);
+
+      // A new game may have been started while the search was running.
+      if (activeGameId !== gameId) {
+        return;
+      }
+
+      if (
+        get().mode !== 'computer' ||
+        get().status.isOver ||
+        game.turn() === get().humanColor
+      ) {
+        set({ isComputerThinking: false });
+        return;
+      }
+
+      if (move) {
+        applyMove(move.from, move.to, move.promotion);
+      }
+
+      set({ isComputerThinking: false });
     },
   };
 });

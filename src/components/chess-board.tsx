@@ -371,6 +371,7 @@ export function ChessBoard({
                     key={square}
                     accessibilityRole="button"
                     accessibilityLabel={label}
+                    disabled={disabled}
                     onPress={() => handleSquarePress(square)}
                     style={[
                       styles.square,

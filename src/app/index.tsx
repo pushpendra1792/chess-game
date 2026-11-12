@@ -1,5 +1,5 @@
-import { GameScreen } from '@/screens/game-screen';
+import { StartScreen } from '@/screens/start-screen';
 
 export default function IndexRoute() {
-  return <GameScreen />;
+  return <StartScreen />;
 }

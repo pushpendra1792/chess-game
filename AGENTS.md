@@ -44,3 +44,5 @@ src/
 
 **Post-Phase 2**
 - [x] Game over modal for checkmate, stalemate, and all draw types
+- [x] Start screen: vs Computer (difficulty + color) or Two Players
+- [x] Computer opponent (minimax + alpha-beta, easy/medium/hard)
