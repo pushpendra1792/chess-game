@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CapturedTray } from '@/components/captured-tray';
 import { ChessBoard } from '@/components/chess-board';
+import { GameOverModal } from '@/components/game-over-modal';
 import { MoveList } from '@/components/move-list';
 import { PromotionPicker } from '@/components/promotion-picker';
 import type { Square } from '@/engine/chess';
@@ -22,6 +23,7 @@ const FALLBACK_BOARD_SIZE = 300;
 
 export function GameScreen() {
   const [boardSize, setBoardSize] = useState(FALLBACK_BOARD_SIZE);
+  const [dismissedFen, setDismissedFen] = useState<string | null>(null);
 
   const board = useGameStore((state) => state.board);
   const turn = useGameStore((state) => state.turn);
@@ -33,6 +35,7 @@ export function GameScreen() {
   const history = useGameStore((state) => state.history);
   const captured = useGameStore((state) => state.captured);
   const status = useGameStore((state) => state.status);
+  const fen = useGameStore((state) => state.fen);
   const pendingPromotion = useGameStore((state) => state.pendingPromotion);
 
   const tapSquare = useGameStore((state) => state.tapSquare);
@@ -62,6 +65,18 @@ export function GameScreen() {
   const turnLabel = turn === 'w' ? 'White' : 'Black';
   const disabled = status.isOver || pendingPromotion !== null;
   const canUndo = history.length > 0;
+  const showGameOver = status.isOver && dismissedFen !== fen;
+
+  const startNewGame = () => {
+    setDismissedFen(null);
+    newGame();
+  };
+
+  const handleUndo = () => {
+    setDismissedFen(null);
+    undo();
+  };
+
   const statusColor =
     status.kind === 'check'
       ? colors.check
@@ -135,7 +150,7 @@ export function GameScreen() {
               accessibilityRole="button"
               accessibilityLabel="Undo last move"
               disabled={!canUndo}
-              onPress={undo}
+              onPress={handleUndo}
               style={({ pressed }) => [
                 styles.button,
                 styles.secondaryButton,
@@ -150,7 +165,7 @@ export function GameScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Start a new game"
-              onPress={newGame}
+              onPress={startNewGame}
               style={({ pressed }) => [
                 styles.button,
                 styles.primaryButton,
@@ -167,6 +182,13 @@ export function GameScreen() {
         color={turn}
         onSelect={promote}
         onCancel={cancelPromotion}
+      />
+
+      <GameOverModal
+        visible={showGameOver}
+        result={status.message}
+        onNewGame={startNewGame}
+        onViewBoard={() => setDismissedFen(fen)}
       />
     </View>
   );

@@ -151,7 +151,7 @@ export function getGameStatus(chess: Chess): GameStatus {
       isOver: true,
       turn,
       winner: turn === 'w' ? 'b' : 'w',
-      message: `Checkmate — ${other} wins`,
+      message: `${other} wins by checkmate`,
     };
   }
 
@@ -161,7 +161,7 @@ export function getGameStatus(chess: Chess): GameStatus {
       isOver: true,
       turn,
       winner: null,
-      message: 'Stalemate — draw',
+      message: 'Draw by stalemate',
     };
   }
 
@@ -171,7 +171,7 @@ export function getGameStatus(chess: Chess): GameStatus {
       isOver: true,
       turn,
       winner: null,
-      message: 'Draw — insufficient material',
+      message: 'Draw by insufficient material',
     };
   }
 
@@ -181,7 +181,7 @@ export function getGameStatus(chess: Chess): GameStatus {
       isOver: true,
       turn,
       winner: null,
-      message: 'Draw — threefold repetition',
+      message: 'Draw by threefold repetition',
     };
   }
 
@@ -191,7 +191,7 @@ export function getGameStatus(chess: Chess): GameStatus {
       isOver: true,
       turn,
       winner: null,
-      message: 'Draw — fifty-move rule',
+      message: 'Draw by fifty-move rule',
     };
   }
 
