@@ -9,11 +9,10 @@ export type AiMove = {
   promotion?: 'q';
 };
 
-const DEPTH: Record<Difficulty, number> = {
-  easy: 1,
-  medium: 2,
-  hard: 3,
-};
+const EASY_DEPTH = 1;
+const MEDIUM_DEPTH = 2;
+/** Hard keeps deepening until this much time has been spent. */
+const HARD_TIME_BUDGET_MS = 1500;
 
 const MATE_SCORE = 100_000;
 /** Easy picks randomly among moves this close to the best move. */
@@ -162,6 +161,13 @@ function playMove(chess: Chess, move: Move) {
   });
 }
 
+/** Shared state so an in-progress depth can be abandoned when time runs out. */
+type SearchContext = {
+  /** Absolute timestamp, or null for an untimed search. */
+  deadline: number | null;
+  aborted: boolean;
+};
+
 /**
  * Negamax with alpha-beta pruning. Scores are from the side to move.
  * A checkmate is worth more the sooner it happens.
@@ -171,15 +177,21 @@ function search(
   depth: number,
   alpha: number,
   beta: number,
-  ply: number
+  ply: number,
+  context: SearchContext
 ): number {
+  if (context.deadline !== null && Date.now() >= context.deadline) {
+    context.aborted = true;
+    return 0;
+  }
+
   // At the horizon, use chess.js's cheap terminal checks (no SAN generation).
   if (depth <= 0) {
     if (chess.isCheckmate()) {
       return -(MATE_SCORE - ply);
     }
 
-    // Threefold repetition cannot occur within a 3-ply search.
+    // Threefold repetition cannot occur within this shallow a search.
     if (
       chess.isStalemate() ||
       chess.isInsufficientMaterial() ||
@@ -207,8 +219,12 @@ function search(
 
   for (const move of moves) {
     playMove(chess, move);
-    const score = -search(chess, depth - 1, -beta, -nextAlpha, ply + 1);
+    const score = -search(chess, depth - 1, -beta, -nextAlpha, ply + 1, context);
     chess.undo();
+
+    if (context.aborted) {
+      return 0;
+    }
 
     if (score > best) {
       best = score;
@@ -233,44 +249,46 @@ function yieldToUi(): Promise<void> {
   });
 }
 
-export async function findBestMove(
-  fen: string,
-  difficulty: Difficulty
-): Promise<AiMove | null> {
-  const chess = new Chess(fen);
-  const moves = orderMoves(chess);
+function toAiMove(move: Move): AiMove {
+  return {
+    from: move.from,
+    to: move.to,
+    ...(move.promotion ? { promotion: 'q' as const } : {}),
+  };
+}
 
-  if (moves.length === 0) {
-    return null;
-  }
+/** Puts the previous best move first to improve alpha-beta pruning. */
+function moveToFront(moves: Move[], first: Move): Move[] {
+  return [first, ...moves.filter((move) => move !== first)];
+}
 
-  // Give the UI a frame to show the thinking indicator before searching.
-  await yieldToUi();
-
-  const depth = DEPTH[difficulty];
-  const scored: { move: Move; score: number }[] = [];
+async function searchRoot(
+  chess: Chess,
+  moves: Move[],
+  depth: number,
+  deadline: number | null
+): Promise<{ move: Move | null; completed: boolean }> {
+  const context: SearchContext = { deadline, aborted: false };
   let bestMove: Move | null = null;
   let bestScore = -Infinity;
   let alpha = -Infinity;
 
   for (let index = 0; index < moves.length; index += 1) {
-    if (index > 0 && difficulty !== 'easy') {
+    if (context.aborted || (deadline !== null && Date.now() >= deadline)) {
+      return { move: bestMove, completed: false };
+    }
+
+    if (index > 0) {
       await yieldToUi();
     }
 
     const move = moves[index];
     playMove(chess, move);
-    const score = -search(
-      chess,
-      depth - 1,
-      -Infinity,
-      difficulty === 'easy' ? Infinity : -alpha,
-      1
-    );
+    const score = -search(chess, depth - 1, -Infinity, -alpha, 1, context);
     chess.undo();
 
-    if (difficulty === 'easy') {
-      scored.push({ move, score });
+    if (context.aborted) {
+      return { move: bestMove, completed: false };
     }
 
     if (score > bestScore) {
@@ -283,18 +301,90 @@ export async function findBestMove(
     }
   }
 
+  return { move: bestMove, completed: true };
+}
+
+function pickEasyMove(chess: Chess, moves: Move[]): Move | null {
+  const context: SearchContext = { deadline: null, aborted: false };
+  const scored: { move: Move; score: number }[] = [];
+  let bestScore = -Infinity;
+  let bestMove: Move | null = null;
+
+  for (const move of moves) {
+    playMove(chess, move);
+    const score = -search(chess, EASY_DEPTH - 1, -Infinity, Infinity, 1, context);
+    chess.undo();
+
+    scored.push({ move, score });
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestMove = move;
+    }
+  }
+
   if (!bestMove) {
     return null;
   }
 
-  if (difficulty === 'easy') {
-    const candidates = scored.filter((entry) => entry.score >= bestScore - EASY_MARGIN);
-    bestMove = candidates[Math.floor(Math.random() * candidates.length)].move;
+  const candidates = scored.filter((entry) => entry.score >= bestScore - EASY_MARGIN);
+  return candidates[Math.floor(Math.random() * candidates.length)].move;
+}
+
+export async function findBestMove(
+  fen: string,
+  difficulty: Difficulty
+): Promise<AiMove | null> {
+  const chess = new Chess(fen);
+  const rootMoves = orderMoves(chess);
+
+  if (rootMoves.length === 0) {
+    return null;
   }
 
-  return {
-    from: bestMove.from,
-    to: bestMove.to,
-    ...(bestMove.promotion ? { promotion: 'q' as const } : {}),
-  };
+  // Give the UI a frame to show the thinking indicator before searching.
+  await yieldToUi();
+
+  if (difficulty === 'easy') {
+    const move = pickEasyMove(chess, rootMoves);
+    return move ? toAiMove(move) : null;
+  }
+
+  if (difficulty === 'medium') {
+    const result = await searchRoot(chess, rootMoves, MEDIUM_DEPTH, null);
+    return result.move ? toAiMove(result.move) : null;
+  }
+
+  // Hard: iterative deepening. Only a completely searched depth is trusted.
+  const deadline = Date.now() + HARD_TIME_BUDGET_MS;
+  let bestMove: Move | null = null;
+  let orderedMoves = rootMoves;
+
+  for (let depth = 1; ; depth += 1) {
+    // Also yield between depths: some positions have only one root move.
+    if (depth > 1) {
+      await yieldToUi();
+    }
+
+    const result = await searchRoot(chess, orderedMoves, depth, deadline);
+
+    if (!result.completed) {
+      // The last completed depth is the reliable result. Fall back to the
+      // partial result only when even depth 1 ran out of time.
+      if (!bestMove) {
+        bestMove = result.move;
+      }
+      break;
+    }
+
+    bestMove = result.move;
+
+    if (!bestMove) {
+      break;
+    }
+
+    orderedMoves = moveToFront(orderedMoves, bestMove);
+  }
+
+  return bestMove ? toAiMove(bestMove) : null;
 }
