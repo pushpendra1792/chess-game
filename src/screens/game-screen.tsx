@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -16,8 +16,11 @@ import { GameOverModal } from '@/components/game-over-modal';
 import { MoveList } from '@/components/move-list';
 import { PromotionPicker } from '@/components/promotion-picker';
 import type { Square } from '@/engine/chess';
+import { useGameFeedback } from '@/hooks/use-game-feedback';
 import { useGameStore } from '@/store/game-store';
-import { colors, radius, spacing } from '@/theme/colors';
+import { useSettingsStore } from '@/store/settings-store';
+import { radius, spacing } from '@/theme/colors';
+import { useTheme } from '@/theme/use-theme';
 
 const SCREEN_PADDING = spacing.lg;
 const VERTICAL_CHROME = 340;
@@ -54,6 +57,19 @@ export function GameScreen() {
   const promote = useGameStore((state) => state.promote);
   const cancelPromotion = useGameStore((state) => state.cancelPromotion);
   const playComputerMove = useGameStore((state) => state.playComputerMove);
+
+  const showLegalMoves = useSettingsStore((state) => state.showLegalMoves);
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
+  useGameFeedback();
+
+  const statusColor =
+    status.kind === 'check'
+      ? colors.check
+      : status.kind === 'playing'
+        ? colors.text
+        : colors.accent;
 
   const handleContentLayout = (event: LayoutChangeEvent) => {
     const { width: contentWidth, height: contentHeight } = event.nativeEvent.layout;
@@ -100,13 +116,6 @@ export function GameScreen() {
     undo();
   };
 
-  const statusColor =
-    status.kind === 'check'
-      ? colors.check
-      : status.kind === 'playing'
-        ? colors.text
-        : colors.accent;
-
   return (
     <View style={styles.screen}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
@@ -149,6 +158,18 @@ export function GameScreen() {
                 </>
               )}
             </View>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Settings"
+              hitSlop={8}
+              onPress={() => router.push('/settings')}
+              style={({ pressed }) => [
+                styles.settingsButton,
+                pressed && styles.settingsButtonPressed,
+              ]}>
+              <Text style={styles.settingsIcon}>⚙</Text>
+            </Pressable>
           </View>
 
           <CapturedTray
@@ -166,6 +187,7 @@ export function GameScreen() {
               turn={turn}
               selectedSquare={selectedSquare}
               legalMoves={legalMoves}
+              showLegalMoves={showLegalMoves}
               lastMove={lastMove}
               checkSquare={checkSquare}
               moveCount={moveCount}
@@ -239,116 +261,128 @@ export function GameScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  safeArea: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: SCREEN_PADDING,
-    paddingVertical: spacing.xs,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  menuButton: {
-    paddingVertical: spacing.xs,
-    paddingRight: spacing.sm,
-  },
-  menuButtonPressed: {
-    opacity: 0.6,
-  },
-  menuText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.textMuted,
-  },
-  turnBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  turnDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  turnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  boardFrame: {
-    alignSelf: 'center',
-    zIndex: 10,
-    borderRadius: radius.board,
-    backgroundColor: colors.boardLight,
-    shadowColor: '#000000',
-    shadowOpacity: 0.18,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
-  },
-  status: {
-    fontSize: 15,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  button: {
-    flex: 1,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.button,
-  },
-  primaryButton: {
-    backgroundColor: colors.accent,
-  },
-  primaryButtonPressed: {
-    backgroundColor: colors.accentPressed,
-  },
-  primaryButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.accentText,
-  },
-  secondaryButton: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  secondaryButtonPressed: {
-    backgroundColor: colors.surfaceMuted,
-  },
-  secondaryButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonTextDisabled: {
-    color: colors.textMuted,
-  },
-});
+function createStyles(colors: ReturnType<typeof import('@/theme/use-theme').useTheme>['colors']) {
+  return StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    safeArea: {
+      flex: 1,
+    },
+    content: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: spacing.sm,
+      paddingHorizontal: SCREEN_PADDING,
+      paddingVertical: spacing.xs,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    menuButton: {
+      paddingVertical: spacing.xs,
+      paddingRight: spacing.sm,
+    },
+    menuButtonPressed: {
+      opacity: 0.6,
+    },
+    menuText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: colors.textMuted,
+    },
+    turnBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      paddingHorizontal: spacing.md,
+      paddingVertical: 6,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+    },
+    turnDot: {
+      width: 12,
+      height: 12,
+      borderRadius: 6,
+      borderWidth: 1,
+    },
+    turnText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.text,
+    },
+    boardFrame: {
+      alignSelf: 'center',
+      zIndex: 10,
+      borderRadius: radius.board,
+      backgroundColor: colors.boardLight,
+      shadowColor: '#000000',
+      shadowOpacity: 0.18,
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 8,
+    },
+    status: {
+      fontSize: 15,
+      fontWeight: '600',
+      textAlign: 'center',
+    },
+    actions: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+    },
+    button: {
+      flex: 1,
+      height: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: radius.button,
+    },
+    primaryButton: {
+      backgroundColor: colors.accent,
+    },
+    primaryButtonPressed: {
+      backgroundColor: colors.accentPressed,
+    },
+    primaryButtonText: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.accentText,
+    },
+    secondaryButton: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+    },
+    secondaryButtonPressed: {
+      backgroundColor: colors.surfaceMuted,
+    },
+    secondaryButtonText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: colors.text,
+    },
+    buttonDisabled: {
+      opacity: 0.5,
+    },
+    buttonTextDisabled: {
+      color: colors.textMuted,
+    },
+    settingsButton: {
+      padding: spacing.xs,
+    },
+    settingsButtonPressed: {
+      opacity: 0.6,
+    },
+    settingsIcon: {
+      fontSize: 20,
+      color: colors.textMuted,
+    },
+  });
+}

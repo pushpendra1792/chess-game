@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 
-import { colors, radius, spacing } from '@/theme/colors';
+import { radius, spacing, type ThemeColors } from '@/theme/colors';
+import { useTheme } from '@/theme/use-theme';
 
 type MoveListProps = {
   moves: string[];
@@ -10,6 +11,8 @@ type MoveListProps = {
 
 export function MoveList({ moves, width }: MoveListProps) {
   const scrollRef = useRef<ScrollViewInstance>(null);
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });
@@ -50,50 +53,52 @@ export function MoveList({ moves, width }: MoveListProps) {
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    paddingHorizontal: spacing.sm + 2,
-    paddingTop: spacing.xs + 2,
-    paddingBottom: spacing.xs,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.card,
-    backgroundColor: colors.surface,
-  },
-  title: {
-    paddingHorizontal: spacing.xs,
-    paddingBottom: spacing.xs,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-    color: colors.textMuted,
-  },
-  scroll: {
-    height: 62,
-  },
-  content: {
-    paddingBottom: spacing.xs,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 1,
-  },
-  number: {
-    width: 28,
-    fontSize: 12,
-    color: colors.textMuted,
-  },
-  move: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  empty: {
-    paddingTop: spacing.sm,
-    fontSize: 12,
-    color: colors.textMuted,
-  },
-});
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    card: {
+      paddingHorizontal: spacing.sm + 2,
+      paddingTop: spacing.xs + 2,
+      paddingBottom: spacing.xs,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: radius.card,
+      backgroundColor: colors.surface,
+    },
+    title: {
+      paddingHorizontal: spacing.xs,
+      paddingBottom: spacing.xs,
+      fontSize: 11,
+      fontWeight: '700',
+      letterSpacing: 0.6,
+      textTransform: 'uppercase',
+      color: colors.textMuted,
+    },
+    scroll: {
+      height: 62,
+    },
+    content: {
+      paddingBottom: spacing.xs,
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 1,
+    },
+    number: {
+      width: 28,
+      fontSize: 12,
+      color: colors.textMuted,
+    },
+    move: {
+      flex: 1,
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.text,
+    },
+    empty: {
+      paddingTop: spacing.sm,
+      fontSize: 12,
+      color: colors.textMuted,
+    },
+  });
+}

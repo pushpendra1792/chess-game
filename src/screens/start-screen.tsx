@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,7 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Difficulty } from '@/engine/ai';
 import type { Color } from '@/engine/chess';
 import { useGameStore, type GameMode } from '@/store/game-store';
-import { colors, radius, spacing } from '@/theme/colors';
+import { radius, spacing } from '@/theme/colors';
+import { useTheme } from '@/theme/use-theme';
 
 const DIFFICULTIES: { value: Difficulty; label: string }[] = [
   { value: 'easy', label: 'Easy' },
@@ -23,9 +24,12 @@ type ChoiceProps = {
   label: string;
   selected: boolean;
   onPress: () => void;
+  colors: ReturnType<typeof import('@/theme/use-theme').useTheme>['colors'];
 };
 
-function Choice({ label, selected, onPress }: ChoiceProps) {
+function Choice({ label, selected, onPress, colors }: ChoiceProps) {
+  const styles = useMemo(() => createChoiceStyles(colors), [colors]);
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -44,6 +48,7 @@ function Choice({ label, selected, onPress }: ChoiceProps) {
 }
 
 export function StartScreen() {
+  const { colors } = useTheme();
   const [mode, setMode] = useState<GameMode>('computer');
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [humanColor, setHumanColor] = useState<Color>('w');
@@ -54,6 +59,8 @@ export function StartScreen() {
     startGame({ mode, difficulty, humanColor });
     router.push('/game');
   };
+
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
@@ -70,11 +77,13 @@ export function StartScreen() {
               label="vs Computer"
               selected={mode === 'computer'}
               onPress={() => setMode('computer')}
+              colors={colors}
             />
             <Choice
               label="Two Players"
               selected={mode === 'two-player'}
               onPress={() => setMode('two-player')}
+              colors={colors}
             />
           </View>
 
@@ -88,6 +97,7 @@ export function StartScreen() {
                     label={option.label}
                     selected={difficulty === option.value}
                     onPress={() => setDifficulty(option.value)}
+                    colors={colors}
                   />
                 ))}
               </View>
@@ -100,6 +110,7 @@ export function StartScreen() {
                     label={option.label}
                     selected={humanColor === option.value}
                     onPress={() => setHumanColor(option.value)}
+                    colors={colors}
                   />
                 ))}
               </View>
@@ -116,104 +127,141 @@ export function StartScreen() {
             ]}>
             <Text style={styles.startText}>Start Game</Text>
           </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
+            hitSlop={12}
+            onPress={() => router.push('/settings')}
+            style={({ pressed }) => [
+              styles.settingsButton,
+              pressed && styles.settingsButtonPressed,
+            ]}>
+            <Text style={styles.settingsText}>Settings</Text>
+          </Pressable>
         </View>
       </View>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    gap: spacing.xl,
-    padding: spacing.lg,
-  },
-  hero: {
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  title: {
-    fontSize: 40,
-    fontWeight: '700',
-    letterSpacing: -1,
-    color: colors.text,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: colors.textMuted,
-    textAlign: 'center',
-  },
-  card: {
-    gap: spacing.sm,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.card,
-    backgroundColor: colors.surface,
-    shadowColor: '#000000',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
-  },
-  label: {
-    marginTop: spacing.sm,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-    color: colors.textMuted,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  choice: {
-    flex: 1,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderRadius: radius.button,
-  },
-  choiceIdle: {
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  choiceSelected: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accent,
-  },
-  choicePressed: {
-    opacity: 0.75,
-  },
-  choiceText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  choiceTextSelected: {
-    color: colors.accentText,
-  },
-  startButton: {
-    marginTop: spacing.md,
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.button,
-    backgroundColor: colors.accent,
-  },
-  startButtonPressed: {
-    backgroundColor: colors.accentPressed,
-  },
-  startText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.accentText,
-  },
-});
+function createChoiceStyles(colors: ReturnType<typeof import('@/theme/use-theme').useTheme>['colors']) {
+  return StyleSheet.create({
+    choice: {
+      flex: 1,
+      height: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderRadius: radius.button,
+    },
+    choiceIdle: {
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+    },
+    choiceSelected: {
+      borderColor: colors.accent,
+      backgroundColor: colors.accent,
+    },
+    choicePressed: {
+      opacity: 0.75,
+    },
+    choiceText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.text,
+    },
+    choiceTextSelected: {
+      color: colors.accentText,
+    },
+  });
+}
+
+function createStyles(colors: ReturnType<typeof import('@/theme/use-theme').useTheme>['colors']) {
+  return StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    content: {
+      flex: 1,
+      justifyContent: 'center',
+      gap: spacing.xl,
+      padding: spacing.lg,
+    },
+    hero: {
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+    title: {
+      fontSize: 40,
+      fontWeight: '700',
+      letterSpacing: -1,
+      color: colors.text,
+    },
+    subtitle: {
+      fontSize: 14,
+      color: colors.textMuted,
+      textAlign: 'center',
+    },
+    card: {
+      gap: spacing.sm,
+      padding: spacing.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: radius.card,
+      backgroundColor: colors.surface,
+      shadowColor: '#000000',
+      shadowOpacity: 0.08,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 6 },
+      elevation: 4,
+    },
+    label: {
+      marginTop: spacing.sm,
+      fontSize: 11,
+      fontWeight: '700',
+      letterSpacing: 0.6,
+      textTransform: 'uppercase',
+      color: colors.textMuted,
+    },
+    row: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+    },
+    startButton: {
+      marginTop: spacing.md,
+      height: 48,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: radius.button,
+      backgroundColor: colors.accent,
+    },
+    startButtonPressed: {
+      backgroundColor: colors.accentPressed,
+    },
+    startText: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: colors.accentText,
+    },
+    settingsButton: {
+      marginTop: spacing.sm,
+      height: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: radius.button,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+    },
+    settingsButtonPressed: {
+      backgroundColor: colors.surfaceMuted,
+    },
+    settingsText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.text,
+    },
+  });
+}

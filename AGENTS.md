@@ -46,3 +46,12 @@ src/
 - [x] Game over modal for checkmate, stalemate, and all draw types
 - [x] Start screen: vs Computer (difficulty + color) or Two Players
 - [x] Computer opponent (minimax + alpha-beta, easy/medium/hard)
+
+**Settings & Theming**
+- [x] Settings screen reachable from Start and Game screens
+- [x] Board theme picker: Classic, Wood, Blue, Dark
+- [x] Haptics on/off toggle
+- [x] Sound on/off toggle (UI only)
+- [x] Show legal move dots on/off toggle
+- [x] Settings persisted with AsyncStorage in Zustand store
+- [x] All UI components (board, trays, move list, modals, promotion picker) follow selected theme

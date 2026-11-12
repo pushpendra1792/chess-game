@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/immutability, react-hooks/refs -- Reanimated shared values are deliberately mutable, and gesture callbacks read the latest board values from refs outside of render. */
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -20,7 +20,8 @@ import {
   type PieceSymbol,
   type Square,
 } from '@/engine/chess';
-import { colors } from '@/theme/colors';
+import type { ThemeColors } from '@/theme/colors';
+import { useTheme } from '@/theme/use-theme';
 
 type ChessBoardProps = {
   size: number;
@@ -28,6 +29,7 @@ type ChessBoardProps = {
   turn: Color;
   selectedSquare: Square | null;
   legalMoves: Square[];
+  showLegalMoves: boolean;
   lastMove: LastMove | null;
   checkSquare: Square | null;
   moveCount: number;
@@ -57,16 +59,13 @@ const SLIDE_DURATION = 190;
 const DROP_DURATION = 90;
 const SNAP_BACK_DURATION = 160;
 
-function squareColor(row: number, column: number): string {
-  return (row + column) % 2 === 0 ? colors.boardLight : colors.boardDark;
-}
-
 export function ChessBoard({
   size,
   board,
   turn,
   selectedSquare,
   legalMoves,
+  showLegalMoves,
   lastMove,
   checkSquare,
   moveCount,
@@ -77,6 +76,8 @@ export function ChessBoard({
   onCancelSelection,
   isDropLegal,
 }: ChessBoardProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const cellSize = size / 8;
   const pieceSize = cellSize * 0.86;
   const dotSize = Math.max(6, Math.round(cellSize * 0.26));
@@ -359,7 +360,7 @@ export function ChessBoard({
                   lastMove?.to === square ||
                   lastMove?.rook?.from === square ||
                   lastMove?.rook?.to === square;
-                const isCapture = isLegal && piece !== null;
+                const isCapture = showLegalMoves && isLegal && piece !== null;
                 const isCheck = checkSquare === square;
                 const isDragged = drag?.from === square;
                 const label = piece
@@ -378,7 +379,10 @@ export function ChessBoard({
                       {
                         width: cellSize,
                         height: cellSize,
-                        backgroundColor: squareColor(rowIndex, columnIndex),
+                        backgroundColor:
+                          (rowIndex + columnIndex) % 2 === 0
+                            ? colors.boardLight
+                            : colors.boardDark,
                       },
                     ]}>
                     {isLastMove && (
@@ -419,7 +423,7 @@ export function ChessBoard({
                       <ChessPiece type={piece.type} color={piece.color} size={pieceSize} />
                     )}
 
-                    {isLegal && !isCapture && (
+                    {showLegalMoves && isLegal && !isCapture && (
                       <View style={styles.centered} pointerEvents="none">
                         <View
                           style={{
@@ -448,7 +452,10 @@ export function ChessBoard({
                 top: slideTarget.row * cellSize,
                 width: cellSize,
                 height: cellSize,
-                backgroundColor: squareColor(slideTarget.row, slideTarget.column),
+                backgroundColor:
+                  (slideTarget.row + slideTarget.column) % 2 === 0
+                    ? colors.boardLight
+                    : colors.boardDark,
               },
               slideCoverStyle,
             ]}
@@ -477,7 +484,10 @@ export function ChessBoard({
                 top: rookTarget.row * cellSize,
                 width: cellSize,
                 height: cellSize,
-                backgroundColor: squareColor(rookTarget.row, rookTarget.column),
+                backgroundColor:
+                  (rookTarget.row + rookTarget.column) % 2 === 0
+                    ? colors.boardLight
+                    : colors.boardDark,
               },
               rookCoverStyle,
             ]}
@@ -513,58 +523,60 @@ export function ChessBoard({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    position: 'relative',
-  },
-  boardClip: {
-    flex: 1,
-    borderRadius: 6,
-    overflow: 'hidden',
-    backgroundColor: colors.boardLight,
-  },
-  row: {
-    flex: 1,
-    flexDirection: 'row',
-  },
-  square: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  centered: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  lastMove: {
-    backgroundColor: colors.squareLastMove,
-  },
-  selected: {
-    backgroundColor: colors.squareSelected,
-  },
-  check: {
-    backgroundColor: colors.squareCheck,
-  },
-  captureRing: {
-    borderColor: colors.moveRing,
-  },
-  pieceOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 25,
-  },
-  slideCover: {
-    position: 'absolute',
-    zIndex: 20,
-  },
-  dragPiece: {
-    zIndex: 30,
-  },
-});
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    container: {
+      position: 'relative',
+    },
+    boardClip: {
+      flex: 1,
+      borderRadius: 6,
+      overflow: 'hidden',
+      backgroundColor: colors.boardLight,
+    },
+    row: {
+      flex: 1,
+      flexDirection: 'row',
+    },
+    square: {
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    centered: {
+      position: 'absolute',
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    lastMove: {
+      backgroundColor: colors.squareLastMove,
+    },
+    selected: {
+      backgroundColor: colors.squareSelected,
+    },
+    check: {
+      backgroundColor: colors.squareCheck,
+    },
+    captureRing: {
+      borderColor: colors.moveRing,
+    },
+    pieceOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 25,
+    },
+    slideCover: {
+      position: 'absolute',
+      zIndex: 20,
+    },
+    dragPiece: {
+      zIndex: 30,
+    },
+  });
+}

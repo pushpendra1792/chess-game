@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Circle, G, Path, Rect, Svg } from 'react-native-svg';
 import type { Color, PieceSymbol } from 'chess.js';
 
-import { colors } from '@/theme/colors';
+import { useTheme } from '@/theme/use-theme';
 
 type ChessPieceProps = {
   type: PieceSymbol;
@@ -105,6 +105,7 @@ function renderPiece(type: PieceSymbol, fill: string, detail: string): ReactNode
 }
 
 export function ChessPiece({ type, color, size }: ChessPieceProps) {
+  const { colors } = useTheme();
   const isWhite = color === 'w';
 
   const fill = isWhite ? colors.whitePiece : colors.blackPiece;
