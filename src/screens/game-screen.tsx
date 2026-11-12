@@ -1,31 +1,67 @@
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useState } from 'react';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type LayoutChangeEvent,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CapturedTray } from '@/components/captured-tray';
 import { ChessBoard } from '@/components/chess-board';
+import { MoveList } from '@/components/move-list';
+import { PromotionPicker } from '@/components/promotion-picker';
+import type { Square } from '@/engine/chess';
 import { useGameStore } from '@/store/game-store';
 import { colors, radius, spacing } from '@/theme/colors';
 
 const SCREEN_PADDING = spacing.lg;
-const VERTICAL_CHROME = 250;
+const VERTICAL_CHROME = 340;
+const FALLBACK_BOARD_SIZE = 300;
 
 export function GameScreen() {
-  const { width, height } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
+  const [boardSize, setBoardSize] = useState(FALLBACK_BOARD_SIZE);
 
   const board = useGameStore((state) => state.board);
   const turn = useGameStore((state) => state.turn);
   const selectedSquare = useGameStore((state) => state.selectedSquare);
   const legalMoves = useGameStore((state) => state.legalMoves);
   const lastMove = useGameStore((state) => state.lastMove);
+  const checkSquare = useGameStore((state) => state.checkSquare);
+  const moveCount = useGameStore((state) => state.moveCount);
+  const history = useGameStore((state) => state.history);
+  const captured = useGameStore((state) => state.captured);
   const status = useGameStore((state) => state.status);
-  const tapSquare = useGameStore((state) => state.tapSquare);
-  const newGame = useGameStore((state) => state.newGame);
+  const pendingPromotion = useGameStore((state) => state.pendingPromotion);
 
-  const availableWidth = width - SCREEN_PADDING * 2;
-  const availableHeight = height - insets.top - insets.bottom - VERTICAL_CHROME;
-  const boardSize = Math.floor(Math.min(availableWidth, Math.max(200, availableHeight)));
+  const tapSquare = useGameStore((state) => state.tapSquare);
+  const selectSquare = useGameStore((state) => state.selectSquare);
+  const dropSquare = useGameStore((state) => state.dropSquare);
+  const cancelSelection = useGameStore((state) => state.cancelSelection);
+  const undo = useGameStore((state) => state.undo);
+  const newGame = useGameStore((state) => state.newGame);
+  const promote = useGameStore((state) => state.promote);
+  const cancelPromotion = useGameStore((state) => state.cancelPromotion);
+
+  const handleContentLayout = (event: LayoutChangeEvent) => {
+    const { width: contentWidth, height: contentHeight } = event.nativeEvent.layout;
+    const availableWidth = contentWidth - SCREEN_PADDING * 2;
+    const availableHeight = contentHeight - VERTICAL_CHROME;
+    const nextSize = Math.max(200, Math.floor(Math.min(availableWidth, availableHeight)));
+
+    setBoardSize(nextSize);
+  };
+
+  // Read the store at drop time so a fast drag never sees stale legal moves.
+  const isDropLegal = (from: Square, to: Square) => {
+    const state = useGameStore.getState();
+    return state.selectedSquare === from && state.legalMoves.includes(to);
+  };
 
   const turnLabel = turn === 'w' ? 'White' : 'Black';
+  const disabled = status.isOver || pendingPromotion !== null;
+  const canUndo = history.length > 0;
   const statusColor =
     status.kind === 'check'
       ? colors.check
@@ -36,8 +72,8 @@ export function GameScreen() {
   return (
     <View style={styles.screen}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-        <View style={styles.content}>
-          <View style={styles.header}>
+        <View style={styles.content} onLayout={handleContentLayout}>
+          <View style={[styles.header, { width: boardSize }]}>
             <Text style={styles.title}>Chess</Text>
 
             <View style={styles.turnBadge}>
@@ -55,30 +91,83 @@ export function GameScreen() {
             </View>
           </View>
 
+          <CapturedTray
+            label="Black took"
+            playerColor="b"
+            capturedColor="w"
+            pieces={captured.b}
+            width={boardSize}
+          />
+
           <View style={[styles.boardFrame, { width: boardSize, height: boardSize }]}>
             <ChessBoard
               size={boardSize}
               board={board}
+              turn={turn}
               selectedSquare={selectedSquare}
               legalMoves={legalMoves}
               lastMove={lastMove}
+              checkSquare={checkSquare}
+              moveCount={moveCount}
+              disabled={disabled}
               onSquarePress={tapSquare}
+              onSelectSquare={selectSquare}
+              onDropSquare={dropSquare}
+              onCancelSelection={cancelSelection}
+              isDropLegal={isDropLegal}
             />
           </View>
 
-          <View style={styles.footer}>
-            <Text style={[styles.status, { color: statusColor }]}>{status.message}</Text>
+          <CapturedTray
+            label="White took"
+            playerColor="w"
+            capturedColor="b"
+            pieces={captured.w}
+            width={boardSize}
+          />
+
+          <Text style={[styles.status, { color: statusColor }]}>{status.message}</Text>
+
+          <MoveList moves={history} width={boardSize} />
+
+          <View style={[styles.actions, { width: boardSize }]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Undo last move"
+              disabled={!canUndo}
+              onPress={undo}
+              style={({ pressed }) => [
+                styles.button,
+                styles.secondaryButton,
+                pressed && styles.secondaryButtonPressed,
+                !canUndo && styles.buttonDisabled,
+              ]}>
+              <Text style={[styles.secondaryButtonText, !canUndo && styles.buttonTextDisabled]}>
+                Undo
+              </Text>
+            </Pressable>
 
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Start a new game"
               onPress={newGame}
-              style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}>
-              <Text style={styles.buttonText}>New Game</Text>
+              style={({ pressed }) => [
+                styles.button,
+                styles.primaryButton,
+                pressed && styles.primaryButtonPressed,
+              ]}>
+              <Text style={styles.primaryButtonText}>New Game</Text>
             </Pressable>
           </View>
         </View>
       </SafeAreaView>
+
+      <PromotionPicker
+        visible={pendingPromotion !== null}
+        color={turn}
+        onSelect={promote}
+        onCancel={cancelPromotion}
+      />
     </View>
   );
 }
@@ -93,10 +182,11 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.lg,
+    gap: spacing.sm,
     paddingHorizontal: SCREEN_PADDING,
-    paddingBottom: spacing.md,
+    paddingVertical: spacing.xs,
   },
   header: {
     flexDirection: 'row',
@@ -104,7 +194,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '700',
     letterSpacing: -0.5,
     color: colors.text,
@@ -114,7 +204,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
-    paddingVertical: 7,
+    paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: colors.border,
@@ -133,6 +223,7 @@ const styles = StyleSheet.create({
   },
   boardFrame: {
     alignSelf: 'center',
+    zIndex: 10,
     borderRadius: radius.board,
     backgroundColor: colors.boardLight,
     shadowColor: '#000000',
@@ -141,29 +232,50 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 8,
   },
-  footer: {
-    alignItems: 'center',
-    gap: spacing.md,
-  },
   status: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     textAlign: 'center',
   },
+  actions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
   button: {
-    minWidth: 180,
+    flex: 1,
+    height: 44,
     alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: 14,
+    justifyContent: 'center',
     borderRadius: radius.button,
+  },
+  primaryButton: {
     backgroundColor: colors.accent,
   },
-  buttonPressed: {
+  primaryButtonPressed: {
     backgroundColor: colors.accentPressed,
   },
-  buttonText: {
-    fontSize: 16,
+  primaryButtonText: {
+    fontSize: 15,
     fontWeight: '700',
     color: colors.accentText,
+  },
+  secondaryButton: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  secondaryButtonPressed: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  secondaryButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  buttonTextDisabled: {
+    color: colors.textMuted,
   },
 });

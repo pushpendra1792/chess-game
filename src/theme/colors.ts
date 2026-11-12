@@ -9,8 +9,12 @@ export const colors = {
   boardDark: '#B58863',
   squareSelected: 'rgba(255, 199, 61, 0.55)',
   squareLastMove: 'rgba(255, 199, 61, 0.32)',
+  squareCheck: 'rgba(190, 38, 38, 0.5)',
   moveDot: 'rgba(30, 35, 41, 0.28)',
   moveRing: 'rgba(30, 35, 41, 0.45)',
+
+  surfaceMuted: '#EDE8DE',
+  backdrop: 'rgba(18, 21, 26, 0.45)',
 
   whitePiece: '#FCFCFA',
   whitePieceStroke: '#2A2E35',
@@ -35,5 +39,6 @@ export const spacing = {
 
 export const radius = {
   board: 10,
+  card: 12,
   button: 12,
 } as const;

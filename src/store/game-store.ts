@@ -2,17 +2,21 @@ import { create } from 'zustand';
 
 import {
   createGame,
-  getBoardGrid,
-  getGameStatus,
   getLegalTargets,
   getMoveTo,
+  readGame,
   type BoardGrid,
+  type CapturedPieces,
+  type Color,
   type GameStatus,
+  type LastMove,
+  type PromotionPiece,
   type Square,
 } from '@/engine/chess';
-import type { Color } from 'chess.js';
 
-export type LastMove = {
+export type { PromotionPiece } from '@/engine/chess';
+
+export type PendingPromotion = {
   from: Square;
   to: Square;
 };
@@ -24,12 +28,23 @@ type GameSnapshot = {
   selectedSquare: Square | null;
   legalMoves: Square[];
   lastMove: LastMove | null;
+  history: string[];
+  captured: CapturedPieces;
   status: GameStatus;
+  checkSquare: Square | null;
+  moveCount: number;
+  pendingPromotion: PendingPromotion | null;
 };
 
 type GameActions = {
   tapSquare: (square: Square) => void;
+  selectSquare: (square: Square) => void;
+  dropSquare: (square: Square) => void;
+  cancelSelection: () => void;
+  undo: () => void;
   newGame: () => void;
+  promote: (piece: PromotionPiece) => void;
+  cancelPromotion: () => void;
 };
 
 export type GameStore = GameSnapshot & GameActions;
@@ -42,72 +57,158 @@ let game = createGame();
 
 function createSnapshot(): GameSnapshot {
   return {
-    board: getBoardGrid(game),
-    turn: game.turn(),
+    ...readGame(game),
     fen: game.fen(),
     selectedSquare: null,
     legalMoves: [],
-    lastMove: null,
-    status: getGameStatus(game),
+    pendingPromotion: null,
   };
 }
 
-export const useGameStore = create<GameStore>((set, get) => ({
-  ...createSnapshot(),
-
-  newGame: () => {
-    game = createGame();
-    set(createSnapshot());
-  },
-
-  tapSquare: (square) => {
-    const { selectedSquare, legalMoves, status } = get();
-
-    if (status.isOver) {
+export const useGameStore = create<GameStore>((set, get) => {
+  const applyMove = (from: Square, to: Square, promotion?: PromotionPiece) => {
+    try {
+      game.move({
+        from,
+        to,
+        ...(promotion ? { promotion } : {}),
+      });
+    } catch {
+      set({ pendingPromotion: null, selectedSquare: null, legalMoves: [] });
       return;
     }
 
-    if (selectedSquare) {
-      if (selectedSquare === square) {
+    set(createSnapshot());
+  };
+
+  const attemptMove = (from: Square, to: Square) => {
+    const target = getMoveTo(game, from, to);
+
+    if (!target) {
+      set({ selectedSquare: null, legalMoves: [] });
+      return;
+    }
+
+    if (target.promotion) {
+      set({
+        pendingPromotion: { from, to },
+        selectedSquare: null,
+        legalMoves: [],
+      });
+      return;
+    }
+
+    applyMove(from, to);
+  };
+
+  return {
+    ...createSnapshot(),
+
+    newGame: () => {
+      game = createGame();
+      set(createSnapshot());
+    },
+
+    tapSquare: (square) => {
+      const { selectedSquare, legalMoves, status, pendingPromotion } = get();
+
+      if (pendingPromotion || status.isOver) {
+        return;
+      }
+
+      if (selectedSquare) {
+        if (selectedSquare === square) {
+          set({ selectedSquare: null, legalMoves: [] });
+          return;
+        }
+
+        if (legalMoves.includes(square)) {
+          attemptMove(selectedSquare, square);
+          return;
+        }
+      }
+
+      const piece = game.get(square);
+
+      if (piece && piece.color === game.turn()) {
+        set({
+          selectedSquare: square,
+          legalMoves: getLegalTargets(game, square),
+        });
+        return;
+      }
+
+      set({ selectedSquare: null, legalMoves: [] });
+    },
+
+    selectSquare: (square) => {
+      const { status, pendingPromotion } = get();
+
+      if (pendingPromotion || status.isOver) {
+        return;
+      }
+
+      const piece = game.get(square);
+
+      if (piece && piece.color === game.turn()) {
+        set({
+          selectedSquare: square,
+          legalMoves: getLegalTargets(game, square),
+        });
+        return;
+      }
+
+      set({ selectedSquare: null, legalMoves: [] });
+    },
+
+    dropSquare: (square) => {
+      const { selectedSquare, legalMoves, status, pendingPromotion } = get();
+
+      if (pendingPromotion || status.isOver || !selectedSquare) {
         set({ selectedSquare: null, legalMoves: [] });
         return;
       }
 
       if (legalMoves.includes(square)) {
-        const target = getMoveTo(game, selectedSquare, square);
-
-        if (target) {
-          // Phase 1 always promotes to a queen; a promotion picker comes later.
-          const move = game.move({
-            from: selectedSquare,
-            to: square,
-            ...(target.promotion ? { promotion: 'q' } : {}),
-          });
-
-          set({
-            board: getBoardGrid(game),
-            turn: game.turn(),
-            fen: game.fen(),
-            selectedSquare: null,
-            legalMoves: [],
-            lastMove: { from: move.from, to: move.to },
-            status: getGameStatus(game),
-          });
-          return;
-        }
+        attemptMove(selectedSquare, square);
+        return;
       }
-    }
 
-    const piece = game.get(square);
+      set({ selectedSquare: null, legalMoves: [] });
+    },
 
-    if (piece && piece.color === game.turn()) {
-      set({
-        selectedSquare: square,
-        legalMoves: getLegalTargets(game, square),
-      });
-      return;
-    }
+    cancelSelection: () => {
+      set({ selectedSquare: null, legalMoves: [] });
+    },
 
-    set({ selectedSquare: null, legalMoves: [] });
-  },
-}));
+    undo: () => {
+      const { history, pendingPromotion } = get();
+
+      if (pendingPromotion) {
+        set({ pendingPromotion: null, selectedSquare: null, legalMoves: [] });
+        return;
+      }
+
+      if (history.length === 0) {
+        return;
+      }
+
+      game.undo();
+      set(createSnapshot());
+    },
+
+    promote: (piece) => {
+      const { pendingPromotion } = get();
+
+      if (!pendingPromotion) {
+        return;
+      }
+
+      applyMove(pendingPromotion.from, pendingPromotion.to, piece);
+    },
+
+    cancelPromotion: () => {
+      set({ pendingPromotion: null, selectedSquare: null, legalMoves: [] });
+    },
+  };
+});
